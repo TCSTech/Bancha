@@ -144,7 +144,10 @@ class BanchaPaginatorComponent extends PaginatorComponent {
 			$this->whitelist[] = 'conditions';
 
 			// apply the Bancha default settings
-			$this->settings = array_merge($this->settings, $this->banchaSettings);
+			//$this->settings = array_merge($this->settings, $this->banchaSettings);
+                        //If the input arrays have the same string keys, then the later value for
+                        //that key will overwrite the previous one; instead do a union.
+                        $this->settings = $this->settings + $this->banchaSettings;
 
 			// debug warning
 			if(Configure::read('debug')==2 && isset($this->Controller->request->params['named']['limit']) &&
