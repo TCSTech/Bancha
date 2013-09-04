@@ -45,6 +45,7 @@ class BanchaRemotableBehavior extends ModelBehavior {
 		'string'    => array('type'=>'string'),
 		'datetime'  => array('type'=>'date', 'dateFormat' =>'Y-m-d H:i:s'),
 		'date'      => array('type'=>'date', 'dateFormat' =>'Y-m-d'),
+		'time'      => array('type'=>'date', 'dateFormat' =>'H:i:s'),
 		'float'     => array('type'=>'float'),
 		'text'      => array('type'=>'string'),
 		'boolean'   => array('type'=>'boolean'),
@@ -74,30 +75,41 @@ class BanchaRemotableBehavior extends ModelBehavior {
 	 */
 	private $_defaults = array(
 		/**
-		 * If true the model also saves and validates records with missing
-		 * fields, like ExtJS is providing for edit operations.
-		 * If you set this to false please use $Model->saveFields($data,$options)
-		 * to save edit-data from extjs.
+		 * If true, the model also saves and validates records with missing
+		 * fields, like Ext JS/Sencha Touch is providing for edit operations.
+		 * If you set this to false, please use $Model->saveFields($data,$options)
+		 * to save edit-data from Ext JS/Sencha Touch.
+		 *
+		 * See also:
+		 * http://banchaproject.org/documentation-pro-models-validation-rules.html#useOnlyDefinedFields
+		 *
 		 * @var boolean
 		 */
 		'useOnlyDefinedFields' => true,
 		/**
-		 * Defined which field should be exposed. If defined these fields will
-		 * be taken as a base of field to expose, the excludeFields config will
-		 * still be applied.
+		 * Defined which field should be exposed. If defined, these fields
+		 * will be taken as a base of fields to expose, the excludeFields
+		 * config will still be applied.
+		 *
+		 * See also:
+		 * http://banchaproject.org/documentation-pro-models-exposed-and-hidden-fields.htmls
+		 *
 		 * @var string[]|null
 		 */
 		'exposedFields' => null,
 		/**
-		 * Defined which field should never be exposed. This config overrules
+		 * Defined which fields should never be exposed. This config overrules
 		 * exposedFields.
+		 *
+		 * See also:
+		 * http://banchaproject.org/documentation-pro-models-exposed-and-hidden-fields.htmls
+		 *
 		 * @var string[]
 		 */
 		'excludedFields' => array()
 	);
 	/**
-	 * Sets up the BanchaRemotable behavior. For config options see
-	 * http://docs.banchaproject.org/resources/Advanced-Configurations.html#bancharemotablebehavior-configurations
+	 * Sets up the BanchaRemotable behavior. For config options see above.
 	 *
 	 * @param Model $Model instance of model
 	 * @param array $config array of configuration settings.
@@ -120,6 +132,12 @@ class BanchaRemotableBehavior extends ModelBehavior {
 	 */
 	public function extractBanchaMetaData(Model $Model) {
 
+		//<bancha-basic>
+		if(Configure::read('Bancha.isPro')==false) {
+			return array();
+		}
+		//</bancha-basic>
+		//<bancha-pro>
 		//TODO persist: persist is for generated values true
 		// TODO primary wie setzen?, $model->$primaryKey contains the name of the primary key
 		// ExtJS has a 'idPrimary' attribute which defaults to 'id' which IS the cakephp fieldname
@@ -157,6 +175,7 @@ class BanchaRemotableBehavior extends ModelBehavior {
 		);
 
 		return $ExtMetaData;
+		//</bancha-pro>
 	}
 
 	/**
@@ -280,6 +299,14 @@ class BanchaRemotableBehavior extends ModelBehavior {
 		$result = array();
 		foreach ($this->_getExposedFields($Model) as $fieldName) {
 			if(isset($recData[$fieldName])) {
+				// transforms integers to type int
+				// This is necessary when a form loads fields like user_id,
+				// which need to be a integer
+				if(ctype_digit($recData[$fieldName])) { // is integer string
+					// this looks a bit hacky, but speed is more important then
+					// doing his by checking over the models schema type
+					$recData[$fieldName] = (int) $recData[$fieldName];
+				}
 				$result[$fieldName] = $recData[$fieldName];
 			}
 		}
@@ -378,8 +405,10 @@ class BanchaRemotableBehavior extends ModelBehavior {
 
 	/**
 	 * @see #getColumnTypes
+	 *
+	 * The model is only used for MySQL enum support
 	 */
-	private function getColumnType(Model $Model, $field, $fieldSchema) {
+	public function getColumnType(Model $Model, $fieldName, $fieldSchema) {
 
 		// handle mysql enum field
 		$type = $fieldSchema['type'];
@@ -389,10 +418,10 @@ class BanchaRemotableBehavior extends ModelBehavior {
 
 			// add a new validation rule (only during api call)
 			// in a 2.0 and 2.1 compatible way
-			if(!isset($Model->validate[$field])) {
-				$Model->validate[$field] = array();
+			if(!isset($Model->validate[$fieldName])) {
+				$Model->validate[$fieldName] = array();
 			}
-			$Model->validate[$field]['inList'] = array(
+			$Model->validate[$fieldName]['inList'] = array(
 				'rule' => array('inList', $enums[1])
 			);
 
@@ -400,10 +429,16 @@ class BanchaRemotableBehavior extends ModelBehavior {
 			$type = 'enum';
 		}
 
+		// handle mysql timestamp default value
+		if($type=='timestamp' && $fieldSchema['default']=='CURRENT_TIMESTAMP') {
+			$fieldSchema['null'] = true;
+			$fieldSchema['default'] = '';
+		}
+
 		// handle normal fields
 		return array_merge(
 			array(
-				'name' => $field,
+				'name' => $fieldName,
 				'allowNull' => $fieldSchema['null'],
 				'defaultValue' => (!$fieldSchema['null'] && $fieldSchema['default']===null) ?
 									'' : $fieldSchema['default'] // if null is not allowed fall back to ''
