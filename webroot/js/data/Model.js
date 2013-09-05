@@ -108,7 +108,7 @@ Ext.define('Bancha.data.Model', {
             }
 
             if(!Bancha.isRemoteModel(modelName)) {
-                // IFDEBUG
+                //<debug>
                 Ext.Error.raise({
                     plugin: 'Bancha',
                     modelName: modelName,
@@ -118,22 +118,22 @@ Ext.define('Bancha.data.Model', {
                         '(no remote model).'
                     ].join('')
                 });
-                // ENDIF
+                //</debug>
                 return false;
             }
 
             if(!Bancha.modelMetaDataIsLoaded(modelName)) {
-                // IFDEBUG
+                //<debug>
                 Ext.Error.raise({
                     plugin: 'Bancha',
                     modelName: modelName,
                     msg: 'Bancha: Couldn\'t create the model cause the metadata is not loaded yet, please use onModelReady instead.'
                 });
-                // ENDIF
+                //</debug>
                 return false;
             }
 
-            // IFDEBUG
+            //<debug>
             if(!Ext.isDefined(Bancha.getModelMetaData(modelName).idProperty)) {
                 if(Ext.global.console && Ext.isFunction(Ext.global.console.warn)) {
                     Ext.global.console.warn(
@@ -142,7 +142,7 @@ Ext.define('Bancha.data.Model', {
                         'that this warning is only created in debug mode.');
                 }
             }
-            // ENDIF
+            //</debug>
 
             // configure the new model
             config = Bancha.getModelMetaData(modelName);
@@ -171,40 +171,46 @@ Ext.define('Bancha.data.Model', {
             // set the Bancha proxy
             modelCls.setProxy(this.createBanchaProxy(modelCls));
         },
-        // IFDEBUG
         /**
-         * To display nicer debugging messages this is used in debug mode.
+         * To display nicer debugging messages, i debug mode this returns
+         * a fake function if the stub method doesn't exist.
+         *
+         * In production mode it simply returns the original function or null.
+         *
          * @param  {Object} stub      Ext.Direct stub
          * @param  {String} method    Sencha method name
          * @param  {String} modelName The CakePHP model name
-         * @return {Function}
+         * @return {Function|null}
          */
-        createSafeDirectFn: function(stub, method, modelName) {
+        getStubMethod: function(stub, method, modelName) {
             if(Ext.isDefined(stub[method] && typeof stub[method] === 'function')) {
                 return stub[method];
             }
 
+            var fakeFn = null;
+
+            //<debug>
             // function doesn't exit, create fake which will throw an error on first use
             var map = {
-                    create : 'add',
-                    read   : 'view or index',
-                    update : 'edit',
-                    destroy: 'delete'
-                },
-                fakeFn = function() {
-                    Ext.Error.raise({
-                        plugin: 'Bancha',
-                        modelName: modelName,
-                        msg: [
-                            'Bancha: Tried to call '+modelName+'.'+method+'(...), ',
-                            'but the server-side has not implemented ',
-                            modelName+'sController->'+ map[method]+'(...). ',
-                            '(If you have special inflection rules, the server-side ',
-                            'is maybe looking for a different controller name, ',
-                            'this is just a guess)'
-                        ].join('')
-                    });
-                };
+                create : 'add',
+                read   : 'view or index',
+                update : 'edit',
+                destroy: 'delete'
+            };
+            fakeFn = function() {
+                Ext.Error.raise({
+                    plugin: 'Bancha',
+                    modelName: modelName,
+                    msg: [
+                        'Bancha: Tried to call '+modelName+'.'+method+'(...), ',
+                        'but the server-side has not implemented ',
+                        modelName+'sController->'+ map[method]+'(...). ',
+                        '(If you have special inflection rules, the server-side ',
+                        'is maybe looking for a different controller name, ',
+                        'this is just a guess)'
+                    ].join('')
+                });
+            };
 
             // this is not part of the official Ext API!, but it seems to be necessary to do this for better bancha debugging
             fakeFn.directCfg = { // TODO testen
@@ -226,10 +232,10 @@ Ext.define('Bancha.data.Model', {
                     ].join('')
                 });
             };
+            //</debug>
 
             return fakeFn;
         },
-        // ENDIF
         createBanchaProxy: function(model) {
             var modelName = model.getName().split('.').pop(), // CakePHP model name, e.g. "User"
                 stub,
@@ -258,29 +264,15 @@ Ext.define('Bancha.data.Model', {
                 // by Ext.Direct on the application level
                 batchActions: false,
                 api: {
-                    /* IFPRODUCTION
-                    // if method is not supported by remote it get's set to undefined
-                    read    : stub.read,
-                    create  : stub.create,
-                    update  : stub.update,
-                    destroy : stub.destroy
-                    ENDIF */
-                    // IFDEBUG
-                    read    : this.createSafeDirectFn(stub,'read',modelName),
-                    create  : this.createSafeDirectFn(stub,'create',modelName),
-                    update  : this.createSafeDirectFn(stub,'update',modelName),
-                    destroy : this.createSafeDirectFn(stub,'destroy',modelName)
-                    // ENDIF
+                    read    : this.getStubMethod(stub,'read',modelName),
+                    create  : this.getStubMethod(stub,'create',modelName),
+                    update  : this.getStubMethod(stub,'update',modelName),
+                    destroy : this.getStubMethod(stub,'destroy',modelName)
                 },
                 // because of an error in ext the following directFn def. has to be
                 // defined, which should be read from api.read instead...
                 // see http://www.sencha.com/forum/showthread.php?134505&p=606283&viewfull=1#post606283
-                /* IFPRODUCTION
-                directFn: stub.read,
-                ENDIF */
-                // IFDEBUG
-                directFn: this.createSafeDirectFn(stub,'read',modelName),
-                // ENDIF
+                directFn: this.getStubMethod(stub,'read',modelName),
                 reader: Ext.apply({
                     type: 'json',
                     messageProperty: 'message'
